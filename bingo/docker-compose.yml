@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: bingo
+      POSTGRES_PASSWORD: bingo_dev
+      POSTGRES_DB: bingo_friends
+    ports:
+      - "5433:5432"
+    volumes:
+      - bingo_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bingo -d bingo_friends"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  bingo_postgres_data:

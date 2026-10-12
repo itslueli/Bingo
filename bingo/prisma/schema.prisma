@@ -1,0 +1,167 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RoomStatus {
+  LOBBY
+  IN_PROGRESS
+  ROUND_RESULT
+  PAUSED
+  FINISHED
+  CANCELLED
+}
+
+enum TournamentStatus {
+  PENDING
+  IN_PROGRESS
+  TIEBREAK
+  FINISHED
+  PAUSED
+}
+
+enum RoundPhase {
+  REGULAR
+  TIEBREAK
+  SINGLE
+}
+
+enum RoundStatus {
+  PENDING
+  IN_PROGRESS
+  PAUSED
+  FINISHED
+}
+
+enum DrawMode {
+  MANUAL
+  AUTOMATIC
+}
+
+model Room {
+  id           String       @id @default(cuid())
+  code         String       @unique @db.VarChar(8)
+  hostPlayerId String?
+  settings     Json
+  status       RoomStatus   @default(LOBBY)
+  sequence     Int          @default(0)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  players      Player[]
+  tournaments  Tournament[]
+  rounds       Round[]
+  hostPlayer   Player?      @relation("RoomHost", fields: [hostPlayerId], references: [id], onDelete: SetNull)
+
+  @@index([status, updatedAt])
+}
+
+model Player {
+  id                 String             @id @default(cuid())
+  roomId             String
+  nickname           String             @db.VarChar(24)
+  reconnectTokenHash String             @unique @db.VarChar(64)
+  connected          Boolean            @default(false)
+  joinedAt           DateTime           @default(now())
+  lastSeenAt         DateTime           @default(now())
+  room               Room               @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  hostedRooms        Room[]             @relation("RoomHost")
+  cards              Card[]
+  wins               RoundWinner[]
+  results            TournamentResult[]
+  championships      Tournament[]       @relation("TournamentChampion")
+
+  @@index([roomId])
+  @@unique([roomId, nickname])
+}
+
+model Tournament {
+  id               String             @id @default(cuid())
+  roomId           String
+  regularRoundCount Int
+  status           TournamentStatus   @default(PENDING)
+  championPlayerId String?
+  finalistIds      Json?
+  createdAt        DateTime           @default(now())
+  finishedAt       DateTime?
+  room             Room               @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  champion         Player?            @relation("TournamentChampion", fields: [championPlayerId], references: [id], onDelete: SetNull)
+  rounds           Round[]
+  results          TournamentResult[]
+
+  @@index([roomId, status])
+}
+
+model Round {
+  id           String       @id @default(cuid())
+  tournamentId String?
+  roomId       String
+  ordinal      Int
+  phase        RoundPhase
+  pattern      Json
+  drawMode     DrawMode
+  status       RoundStatus  @default(PENDING)
+  drawSequence Json
+  startedAt    DateTime?
+  endedAt      DateTime?
+  tournament   Tournament?  @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  room         Room         @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  cards        Card[]
+  draws        Draw[]
+  winners      RoundWinner[]
+
+  @@unique([roomId, ordinal])
+  @@index([roomId, status])
+  @@index([tournamentId, phase])
+}
+
+model Card {
+  id        String   @id @default(cuid())
+  roundId   String
+  playerId  String
+  cardIndex Int
+  cells     Json
+  marks     Json     @default("[]")
+  round     Round    @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([roundId, playerId, cardIndex])
+  @@index([playerId, roundId])
+}
+
+model Draw {
+  id        String   @id @default(cuid())
+  roundId   String
+  number    Int
+  drawOrder Int
+  createdAt DateTime @default(now())
+  round     Round    @relation(fields: [roundId], references: [id], onDelete: Cascade)
+
+  @@unique([roundId, number])
+  @@unique([roundId, drawOrder])
+}
+
+model RoundWinner {
+  roundId  String
+  playerId String
+  round    Round  @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  player   Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@id([roundId, playerId])
+  @@index([playerId])
+}
+
+model TournamentResult {
+  tournamentId String
+  playerId     String
+  regularWins  Int        @default(0)
+  placement    Int?
+  tournament   Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  player       Player     @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@id([tournamentId, playerId])
+  @@index([tournamentId, regularWins])
+}

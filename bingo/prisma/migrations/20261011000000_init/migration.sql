@@ -1,0 +1,42 @@
+CREATE TYPE "RoomStatus" AS ENUM ('LOBBY','IN_PROGRESS','ROUND_RESULT','PAUSED','FINISHED','CANCELLED');
+CREATE TYPE "TournamentStatus" AS ENUM ('PENDING','IN_PROGRESS','TIEBREAK','FINISHED','PAUSED');
+CREATE TYPE "RoundPhase" AS ENUM ('REGULAR','TIEBREAK','SINGLE');
+CREATE TYPE "RoundStatus" AS ENUM ('PENDING','IN_PROGRESS','PAUSED','FINISHED');
+CREATE TYPE "DrawMode" AS ENUM ('MANUAL','AUTOMATIC');
+
+CREATE TABLE "Room" ("id" TEXT PRIMARY KEY, "code" VARCHAR(8) NOT NULL UNIQUE, "hostPlayerId" TEXT, "settings" JSONB NOT NULL, "status" "RoomStatus" NOT NULL DEFAULT 'LOBBY', "sequence" INTEGER NOT NULL DEFAULT 0, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP(3) NOT NULL);
+CREATE TABLE "Player" ("id" TEXT PRIMARY KEY, "roomId" TEXT NOT NULL, "nickname" VARCHAR(24) NOT NULL, "reconnectTokenHash" VARCHAR(64) NOT NULL UNIQUE, "connected" BOOLEAN NOT NULL DEFAULT false, "joinedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "lastSeenAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE "Tournament" ("id" TEXT PRIMARY KEY, "roomId" TEXT NOT NULL, "regularRoundCount" INTEGER NOT NULL, "status" "TournamentStatus" NOT NULL DEFAULT 'PENDING', "championPlayerId" TEXT, "finalistIds" JSONB, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "finishedAt" TIMESTAMP(3));
+CREATE TABLE "Round" ("id" TEXT PRIMARY KEY, "tournamentId" TEXT, "roomId" TEXT NOT NULL, "ordinal" INTEGER NOT NULL, "phase" "RoundPhase" NOT NULL, "pattern" JSONB NOT NULL, "drawMode" "DrawMode" NOT NULL, "status" "RoundStatus" NOT NULL DEFAULT 'PENDING', "drawSequence" JSONB NOT NULL, "startedAt" TIMESTAMP(3), "endedAt" TIMESTAMP(3));
+CREATE TABLE "Card" ("id" TEXT PRIMARY KEY, "roundId" TEXT NOT NULL, "playerId" TEXT NOT NULL, "cardIndex" INTEGER NOT NULL, "cells" JSONB NOT NULL, "marks" JSONB NOT NULL DEFAULT '[]');
+CREATE TABLE "Draw" ("id" TEXT PRIMARY KEY, "roundId" TEXT NOT NULL, "number" INTEGER NOT NULL, "drawOrder" INTEGER NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE "RoundWinner" ("roundId" TEXT NOT NULL, "playerId" TEXT NOT NULL, PRIMARY KEY ("roundId","playerId"));
+CREATE TABLE "TournamentResult" ("tournamentId" TEXT NOT NULL, "playerId" TEXT NOT NULL, "regularWins" INTEGER NOT NULL DEFAULT 0, "placement" INTEGER, PRIMARY KEY ("tournamentId","playerId"));
+
+CREATE UNIQUE INDEX "Player_roomId_nickname_key" ON "Player"("roomId","nickname");
+CREATE INDEX "Player_roomId_idx" ON "Player"("roomId");
+CREATE INDEX "Room_status_updatedAt_idx" ON "Room"("status","updatedAt");
+CREATE INDEX "Tournament_roomId_status_idx" ON "Tournament"("roomId","status");
+CREATE UNIQUE INDEX "Round_roomId_ordinal_key" ON "Round"("roomId","ordinal");
+CREATE INDEX "Round_roomId_status_idx" ON "Round"("roomId","status");
+CREATE INDEX "Round_tournamentId_phase_idx" ON "Round"("tournamentId","phase");
+CREATE UNIQUE INDEX "Card_roundId_playerId_cardIndex_key" ON "Card"("roundId","playerId","cardIndex");
+CREATE INDEX "Card_playerId_roundId_idx" ON "Card"("playerId","roundId");
+CREATE UNIQUE INDEX "Draw_roundId_number_key" ON "Draw"("roundId","number");
+CREATE UNIQUE INDEX "Draw_roundId_drawOrder_key" ON "Draw"("roundId","drawOrder");
+CREATE INDEX "RoundWinner_playerId_idx" ON "RoundWinner"("playerId");
+CREATE INDEX "TournamentResult_tournamentId_regularWins_idx" ON "TournamentResult"("tournamentId","regularWins");
+
+ALTER TABLE "Room" ADD CONSTRAINT "Room_hostPlayerId_fkey" FOREIGN KEY ("hostPlayerId") REFERENCES "Player"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "Player" ADD CONSTRAINT "Player_roomId_fkey" FOREIGN KEY ("roomId") REFERENCES "Room"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "Tournament" ADD CONSTRAINT "Tournament_roomId_fkey" FOREIGN KEY ("roomId") REFERENCES "Room"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "Tournament" ADD CONSTRAINT "Tournament_championPlayerId_fkey" FOREIGN KEY ("championPlayerId") REFERENCES "Player"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "Round" ADD CONSTRAINT "Round_tournamentId_fkey" FOREIGN KEY ("tournamentId") REFERENCES "Tournament"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "Round" ADD CONSTRAINT "Round_roomId_fkey" FOREIGN KEY ("roomId") REFERENCES "Room"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "Card" ADD CONSTRAINT "Card_roundId_fkey" FOREIGN KEY ("roundId") REFERENCES "Round"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "Card" ADD CONSTRAINT "Card_playerId_fkey" FOREIGN KEY ("playerId") REFERENCES "Player"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "Draw" ADD CONSTRAINT "Draw_roundId_fkey" FOREIGN KEY ("roundId") REFERENCES "Round"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "RoundWinner" ADD CONSTRAINT "RoundWinner_roundId_fkey" FOREIGN KEY ("roundId") REFERENCES "Round"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "RoundWinner" ADD CONSTRAINT "RoundWinner_playerId_fkey" FOREIGN KEY ("playerId") REFERENCES "Player"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "TournamentResult" ADD CONSTRAINT "TournamentResult_tournamentId_fkey" FOREIGN KEY ("tournamentId") REFERENCES "Tournament"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "TournamentResult" ADD CONSTRAINT "TournamentResult_playerId_fkey" FOREIGN KEY ("playerId") REFERENCES "Player"("id") ON DELETE CASCADE ON UPDATE CASCADE;
